@@ -7,19 +7,20 @@
 
 import UIKit
 import SpriteKit
-import GameplayKit
 
 class GameViewController: UIViewController {
 
+    private let store = GameStore()
+    private var gameScene: GameScene?
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        let scene = GameScene.newGameScene()
 
-        // Present the scene
         let skView = self.view as! SKView
+        let scene = GameScene.makeScene(size: skView.bounds.size, store: store)
+        gameScene = scene
         skView.presentScene(scene)
-        
+
         skView.ignoresSiblingOrder = true
         skView.showsFPS = true
         skView.showsNodeCount = true

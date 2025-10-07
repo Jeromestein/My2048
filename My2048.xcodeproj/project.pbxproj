@@ -18,7 +18,6 @@
 				Actions.sks,
 				Assets.xcassets,
 				GameScene.sks,
-				GameScene.swift,
 			);
 			target = CCC982D42E95D61E006B16E5 /* My2048 iOS */;
 		};
@@ -28,7 +27,6 @@
 				Actions.sks,
 				Assets.xcassets,
 				GameScene.sks,
-				GameScene.swift,
 			);
 			target = CCC982E52E95D61E006B16E5 /* My2048 macOS */;
 		};
