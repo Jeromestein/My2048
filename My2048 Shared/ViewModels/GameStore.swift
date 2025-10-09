@@ -12,6 +12,7 @@ final class GameStore: ObservableObject {
     @Published private(set) var board: GameBoard
     @Published private(set) var status: Status
     @Published private(set) var lastMove: MoveResult?
+    @Published private(set) var bestScore: Int = 0
 
     var score: Int {
         board.score
@@ -25,7 +26,12 @@ final class GameStore: ObservableObject {
         board.rows()
     }
 
+    var canContinue: Bool {
+        status == .won && !hasContinuedAfterWin
+    }
+
     private let initialTileCount: Int
+    private var hasContinuedAfterWin = false
 
     init(boardSize: Int = 4, targetValue: Int = 2048, initialTiles: Int = 2) {
         self.initialTileCount = max(0, min(initialTiles, boardSize * boardSize))
@@ -35,6 +41,7 @@ final class GameStore: ObservableObject {
         self.board = startingBoard
         self.status = startingBoard.isWin ? .won : .playing
         self.lastMove = nil
+        self.bestScore = startingBoard.score
     }
 
     func move(_ direction: MoveDirection) {
@@ -51,6 +58,7 @@ final class GameStore: ObservableObject {
         }
 
         board = workingBoard
+        bestScore = max(bestScore, board.score)
         updateStatus(with: result)
     }
 
@@ -60,6 +68,8 @@ final class GameStore: ObservableObject {
         board = newBoard
         status = newBoard.isWin ? .won : .playing
         lastMove = nil
+        hasContinuedAfterWin = false
+        bestScore = max(bestScore, board.score)
     }
 
     func restart<G: RandomNumberGenerator>(using generator: inout G) {
@@ -68,6 +78,8 @@ final class GameStore: ObservableObject {
         board = newBoard
         status = newBoard.isWin ? .won : .playing
         lastMove = nil
+        hasContinuedAfterWin = false
+        bestScore = max(bestScore, board.score)
     }
 
     func move<G: RandomNumberGenerator>(_ direction: MoveDirection, using generator: inout G) {
@@ -84,12 +96,23 @@ final class GameStore: ObservableObject {
         }
 
         board = workingBoard
+        bestScore = max(bestScore, board.score)
         updateStatus(with: result)
+    }
+
+    func continuePlaying() {
+        guard status == .won else { return }
+        hasContinuedAfterWin = true
+        status = .playing
     }
 
     private func updateStatus(with result: MoveResult) {
         if result.didWin {
-            status = .won
+            if hasContinuedAfterWin {
+                status = .playing
+            } else {
+                status = .won
+            }
         } else if result.isGameOver {
             status = .lost
         } else {

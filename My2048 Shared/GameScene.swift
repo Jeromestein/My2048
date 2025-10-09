@@ -24,12 +24,31 @@ final class GameScene: SKScene {
         let dimension: Int
     }
 
+    private struct HeaderMetrics {
+        let spacing: CGFloat
+        let tileSize: CGFloat
+        let basePanelWidth: CGFloat
+        let panelHeight: CGFloat
+        let scoreboardGap: CGFloat
+        let scoreboardSpacing: CGFloat
+        let minScoreboardSpacing: CGFloat
+        let panelHorizontalPadding: CGFloat
+        let titleFont: CGFloat
+        let subtitleFont: CGFloat
+        let titleSubtitleGap: CGFloat
+        let subtitlePanelGap: CGFloat
+        let headerHeight: CGFloat
+    }
+
     // Board + tiles
     private var layout: Layout?
     private let boardBackground = SKShapeNode()
     private let tileLayer = SKNode()
     private var tileSprites: [UUID: TileSprite] = [:]
     private var boardOffsetY: CGFloat = 0
+    private var headerMetrics: HeaderMetrics?
+    private var topContentMargin: CGFloat = 0
+    private var horizontalContentMargin: CGFloat = 0
 
     // HUD
     private let hudLayer = SKNode()
@@ -49,18 +68,24 @@ final class GameScene: SKScene {
     private let statusBackground = SKShapeNode()
     private let statusTitleLabel = SKLabelNode(text: "")
     private let statusDetailLabel = SKLabelNode(text: "Tap restart to try again.")
+    private let continueButton = SKShapeNode()
+    private let continueLabel = SKLabelNode(text: "Keep Going")
 
-    private var bestScore: Int = 0
     private var lastRenderedStatus: GameStore.Status?
+    private var lastRenderedCanContinue: Bool = false
     private var panelSize: CGSize = .zero
 
     private var cancellables: Set<AnyCancellable> = []
     private var touchStartLocation: CGPoint?
     private var restartTrackingTouch = false
     private var restartTouchInside = false
+    private var continueTrackingTouch = false
+    private var continueTouchInside = false
 
     private let restartButtonColor = SKColor(red: 0.64, green: 0.53, blue: 0.44, alpha: 1.0)
     private let restartButtonHighlightColor = SKColor(red: 0.71, green: 0.58, blue: 0.48, alpha: 1.0)
+    private let continueButtonColor = SKColor(red: 0.97, green: 0.80, blue: 0.28, alpha: 1.0)
+    private let continueButtonHighlightColor = SKColor(red: 0.98, green: 0.84, blue: 0.40, alpha: 1.0)
 
     override init(size: CGSize) {
         super.init(size: size)
@@ -201,6 +226,14 @@ final class GameScene: SKScene {
             statusOverlay.addChild(statusBackground)
             statusOverlay.addChild(statusTitleLabel)
             statusOverlay.addChild(statusDetailLabel)
+            configurePanelNode(continueButton, fillColor: continueButtonColor)
+            continueButton.zPosition = 1
+            continueLabel.fontName = "AvenirNext-Bold"
+            continueLabel.fontColor = SKColor(red: 0.48, green: 0.34, blue: 0.27, alpha: 1.0)
+            continueLabel.verticalAlignmentMode = .center
+            continueLabel.horizontalAlignmentMode = .center
+            statusOverlay.addChild(continueButton)
+            continueButton.addChild(continueLabel)
             hudLayer.addChild(statusOverlay)
         }
     }
@@ -224,54 +257,83 @@ final class GameScene: SKScene {
         value.horizontalAlignmentMode = .center
     }
 
+    private func computeHeaderMetrics(boardSize: CGFloat, dimension: CGFloat) -> HeaderMetrics {
+        let spacing = max(boardSize * 0.04, 8)
+        let tileSize = (boardSize - spacing * (dimension + 1)) / dimension
+        let panelHeight = max(tileSize * 0.82, 58)
+        let panelWidth = max(panelHeight * 1.32, 110)
+        let panelHorizontalPadding = max(panelHeight * 0.5, 26)
+        let scoreboardGap = max(spacing * 0.78, 16)
+        let scoreboardSpacing = max(spacing * 0.55, 14)
+        let minScoreboardSpacing = max(spacing * 0.35, 10)
+        let titleFont = max(boardSize * 0.18, 56)
+        let subtitleFont = max(panelHeight * 0.36, 20)
+        let titleSubtitleGap = max(spacing * 0.33, 10)
+        let subtitlePanelGap = max(spacing * 0.28, 10)
+        let headerHeight = titleFont + titleSubtitleGap + subtitleFont + subtitlePanelGap + panelHeight + scoreboardGap
+        return HeaderMetrics(
+            spacing: spacing,
+            tileSize: tileSize,
+            basePanelWidth: panelWidth,
+            panelHeight: panelHeight,
+            scoreboardGap: scoreboardGap,
+            scoreboardSpacing: scoreboardSpacing,
+            minScoreboardSpacing: minScoreboardSpacing,
+            panelHorizontalPadding: panelHorizontalPadding,
+            titleFont: titleFont,
+            subtitleFont: subtitleFont,
+            titleSubtitleGap: titleSubtitleGap,
+            subtitlePanelGap: subtitlePanelGap,
+            headerHeight: headerHeight
+        )
+    }
+
+    private func updatePanelPath(_ node: SKShapeNode, width: CGFloat, height: CGFloat, cornerRadius: CGFloat) {
+        let rect = CGRect(x: -width / 2, y: -height / 2, width: width, height: height)
+        node.path = CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    }
+
     private func updateLayout() {
         guard let store = store else { return }
         let dimension = store.board.size
         guard dimension > 0 else { return }
         let dimensionCGFloat = CGFloat(dimension)
 
-        let availableLength = min(size.width, size.height) * 0.82
-        guard availableLength > 0 else { return }
+        horizontalContentMargin = max(size.width * 0.05, 32)
+        topContentMargin = max(size.height * 0.05, 36)
+        let bottomMargin = max(size.height * 0.05, 36)
 
-        let spacing = max(availableLength * 0.04, 8)
-        let tileSize = (availableLength - spacing * (dimensionCGFloat + 1)) / dimensionCGFloat
-        guard tileSize > 0 else { return }
+        let maxBoardWidth = size.width - horizontalContentMargin * 2
+        guard maxBoardWidth > 0 else { return }
 
-        let panelWidth = max(tileSize * 1.35, 120)
-        let panelHeight = max(tileSize * 0.85, 64)
-        panelSize = CGSize(width: panelWidth, height: panelHeight)
-        let topMargin: CGFloat = 24
-        let bottomMargin: CGFloat = 24
+        var boardSize = maxBoardWidth
+        var metrics = computeHeaderMetrics(boardSize: boardSize, dimension: dimensionCGFloat)
+        let availableHeight = size.height - topContentMargin - bottomMargin
+        guard availableHeight > 0 else { return }
 
-        let titleFontSize = max(tileSize * 0.85, 54)
-        titleLabel.fontSize = titleFontSize
-        let subtitleFontSize = max(panelHeight * 0.38, 20)
-        subtitleLabel.fontSize = subtitleFontSize
-
-        var offset: CGFloat = 0
-        let boardSize = availableLength
-        let boardTop = boardSize / 2
-        let titleTopAboveBoard = spacing + panelHeight / 2 + panelHeight * 0.32 + titleLabel.frame.height / 2
-        let scoreTopAboveBoard = spacing + panelHeight
-        let headerAboveBoard = max(scoreTopAboveBoard, titleTopAboveBoard)
-        let requiredTop = boardTop + headerAboveBoard
-        let availableTop = size.height / 2 - topMargin
-        if requiredTop > availableTop {
-            offset = availableTop - requiredTop
+        for _ in 0..<6 {
+            let totalHeight = metrics.headerHeight + boardSize
+            if totalHeight > availableHeight || metrics.tileSize <= 0 {
+                let ratio = max(0.55, min(0.95, availableHeight / max(totalHeight, 1)))
+                boardSize = min(maxBoardWidth, boardSize * ratio)
+                if boardSize <= 0 { return }
+                metrics = computeHeaderMetrics(boardSize: boardSize, dimension: dimensionCGFloat)
+            } else {
+                break
+            }
         }
 
-        let boardBottom = offset - boardSize / 2
-        let minBottom = -size.height / 2 + bottomMargin
-        if boardBottom < minBottom {
-            offset += (minBottom - boardBottom)
-        }
+        if metrics.tileSize <= 0 || boardSize <= 0 { return }
 
-        boardOffsetY = offset
-        layout = Layout(boardSize: boardSize, tileSize: tileSize, spacing: spacing, dimension: dimension)
+        headerMetrics = metrics
+        layout = Layout(boardSize: boardSize, tileSize: metrics.tileSize, spacing: metrics.spacing, dimension: dimension)
+
+        let boardTop = size.height / 2 - topContentMargin - metrics.headerHeight
+        boardOffsetY = boardTop - boardSize / 2
 
         let rect = CGRect(
-            origin: CGPoint(x: -availableLength / 2, y: -availableLength / 2),
-            size: CGSize(width: availableLength, height: availableLength)
+            origin: CGPoint(x: -boardSize / 2, y: -boardSize / 2),
+            size: CGSize(width: boardSize, height: boardSize)
         )
         boardBackground.path = CGPath(
             roundedRect: rect,
@@ -286,51 +348,59 @@ final class GameScene: SKScene {
     }
 
     private func updateHUDLayout() {
-        guard let layout = layout else { return }
+        guard let layout = layout, let metrics = headerMetrics else { return }
 
-        let panelWidth = max(layout.tileSize * 1.35, 120)
-        let panelHeight = max(layout.tileSize * 0.85, 64)
-        panelSize = CGSize(width: panelWidth, height: panelHeight)
+        panelSize = CGSize(width: metrics.basePanelWidth, height: metrics.panelHeight)
 
-        let panelRect = CGRect(x: -panelWidth / 2, y: -panelHeight / 2, width: panelWidth, height: panelHeight)
-        let panelPath = CGPath(roundedRect: panelRect, cornerWidth: 14, cornerHeight: 14, transform: nil)
-        scorePanel.path = panelPath
-        bestPanel.path = panelPath
-        restartPanel.path = panelPath
+        layoutPanelLabels(title: scoreTitleLabel, value: scoreValueLabel, panelHeight: metrics.panelHeight)
+        layoutPanelLabels(title: bestTitleLabel, value: bestValueLabel, panelHeight: metrics.panelHeight)
 
-        layoutPanelLabels(title: scoreTitleLabel, value: scoreValueLabel, panelHeight: panelHeight)
-        layoutPanelLabels(title: bestTitleLabel, value: bestValueLabel, panelHeight: panelHeight)
+        let scoreWidth = max(metrics.basePanelWidth, max(scoreTitleLabel.frame.width, scoreValueLabel.frame.width) + metrics.panelHorizontalPadding)
+        let bestWidth = max(metrics.basePanelWidth, max(bestTitleLabel.frame.width, bestValueLabel.frame.width) + metrics.panelHorizontalPadding)
 
-        let boardTop = boardBackground.frame.maxY
-        let controlsY = boardTop + layout.spacing + panelHeight / 2
+        let restartTextWidth = max(restartLabel.frame.width, restartLabel.frame.height)
+        let restartWidth = max(metrics.basePanelWidth, restartTextWidth + metrics.panelHorizontalPadding)
+
+        updatePanelPath(scorePanel, width: scoreWidth, height: metrics.panelHeight, cornerRadius: 14)
+        updatePanelPath(bestPanel, width: bestWidth, height: metrics.panelHeight, cornerRadius: 14)
+        updatePanelPath(restartPanel, width: restartWidth, height: metrics.panelHeight, cornerRadius: 16)
+
+        let boardTop = boardOffsetY + layout.boardSize / 2
+        let scoreboardRowY = boardTop + metrics.scoreboardGap + metrics.panelHeight / 2
+
+        let boardLeft = -layout.boardSize / 2
         let boardRight = layout.boardSize / 2
-        let buttonSpacing = layout.spacing * 0.6
 
-        let restartX = boardRight - panelWidth / 2
-        let bestX = restartX - panelWidth - buttonSpacing
-        let scoreX = bestX - panelWidth - buttonSpacing
+        var spacing = metrics.scoreboardSpacing
+        let totalWidths = scoreWidth + bestWidth + restartWidth
+        var totalRowWidth = totalWidths + spacing * 2
+        if totalRowWidth > layout.boardSize {
+            let availableSpacing = layout.boardSize - totalWidths
+            let clampedSpacing = max(metrics.minScoreboardSpacing, availableSpacing / 2)
+            spacing = clampedSpacing
+            totalRowWidth = totalWidths + spacing * 2
+        }
 
-        scorePanel.position = CGPoint(x: scoreX, y: controlsY)
-        bestPanel.position = CGPoint(x: bestX, y: controlsY)
-        restartPanel.position = CGPoint(x: restartX, y: controlsY)
+        let rowStart = boardLeft + max(0, (layout.boardSize - totalRowWidth) / 2)
+        let scoreX = rowStart + scoreWidth / 2
+        let bestX = scoreX + scoreWidth / 2 + spacing + bestWidth / 2
+        let restartX = bestX + bestWidth / 2 + spacing + restartWidth / 2
 
-        restartLabel.fontSize = panelHeight * 0.34
+        scorePanel.position = CGPoint(x: scoreX, y: scoreboardRowY)
+        bestPanel.position = CGPoint(x: bestX, y: scoreboardRowY)
+        restartPanel.position = CGPoint(x: restartX, y: scoreboardRowY)
+
+        restartLabel.fontSize = metrics.panelHeight * 0.34
         restartLabel.position = .zero
 
-        let titleFontSize = max(layout.tileSize * 0.85, 54)
-        titleLabel.fontSize = titleFontSize
-        let subtitleFontSize = max(panelHeight * 0.38, 20)
-        subtitleLabel.fontSize = subtitleFontSize
+        titleLabel.fontSize = metrics.titleFont
+        subtitleLabel.fontSize = metrics.subtitleFont
 
-        let headerLeftX = -layout.boardSize / 2
-        let titleYOffset = panelHeight * 0.32
-        titleLabel.position = CGPoint(x: headerLeftX, y: controlsY + titleYOffset)
+        let subtitleY = scoreboardRowY + metrics.panelHeight / 2 + metrics.subtitlePanelGap + metrics.subtitleFont / 2
+        let titleY = subtitleY + metrics.subtitleFont / 2 + metrics.titleSubtitleGap + metrics.titleFont / 2
+        let headerLeftX = boardLeft
 
-        let scoreboardBottom = controlsY - panelHeight / 2
-        let subtitleGap = layout.spacing * 0.35
-        let minSubtitleY = boardTop + subtitleLabel.frame.height / 2 + 6
-        let subtitleTarget = scoreboardBottom - subtitleGap - subtitleLabel.frame.height / 2
-        let subtitleY = max(minSubtitleY, subtitleTarget)
+        titleLabel.position = CGPoint(x: headerLeftX, y: titleY)
         subtitleLabel.position = CGPoint(x: headerLeftX, y: subtitleY)
 
         let overlayWidth = layout.boardSize * 0.8
@@ -342,6 +412,12 @@ final class GameScene: SKScene {
         statusTitleLabel.position = CGPoint(x: 0, y: overlayHeight * 0.1)
         statusDetailLabel.fontSize = overlayHeight * 0.16
         statusDetailLabel.position = CGPoint(x: 0, y: -overlayHeight * 0.18)
+        let continueWidth = overlayWidth * 0.46
+        let continueHeight = overlayHeight * 0.22
+        updatePanelPath(continueButton, width: continueWidth, height: continueHeight, cornerRadius: continueHeight * 0.5)
+        continueLabel.fontSize = continueHeight * 0.45
+        continueLabel.position = .zero
+        continueButton.position = CGPoint(x: 0, y: -overlayHeight * 0.22)
     }
 
     private func layoutPanelLabels(title: SKLabelNode, value: SKLabelNode, panelHeight: CGFloat) {
@@ -410,28 +486,36 @@ final class GameScene: SKScene {
 
     private func refreshHUD() {
         guard let store = store else { return }
-        bestScore = max(bestScore, store.score)
         scoreValueLabel.text = "\(store.score)"
-        bestValueLabel.text = "\(bestScore)"
-        updateStatusOverlay(status: store.status)
+        bestValueLabel.text = "\(store.bestScore)"
+        updateStatusOverlay(status: store.status, canContinue: store.canContinue)
     }
 
-    private func updateStatusOverlay(status: GameStore.Status) {
-        guard status != lastRenderedStatus else { return }
+    private func updateStatusOverlay(status: GameStore.Status, canContinue: Bool) {
+        if status == lastRenderedStatus && canContinue == lastRenderedCanContinue {
+            return
+        }
         lastRenderedStatus = status
+        lastRenderedCanContinue = canContinue
 
         switch status {
         case .playing:
+            continueButton.isHidden = true
+            setContinueButtonHighlighted(false)
             hideStatusOverlay()
         case .won:
             statusTitleLabel.text = "You Win!"
-            statusDetailLabel.text = "Tap restart to play again."
+            statusDetailLabel.text = canContinue ? "Keep going or start a new game." : "Tap restart to play again."
             statusBackground.fillColor = SKColor(red: 0.95, green: 0.82, blue: 0.35, alpha: 0.92)
+            continueButton.isHidden = !canContinue
+            setContinueButtonHighlighted(false)
             presentStatusOverlay()
         case .lost:
             statusTitleLabel.text = "Game Over"
             statusDetailLabel.text = "Tap restart to try again."
             statusBackground.fillColor = SKColor(red: 0.54, green: 0.31, blue: 0.27, alpha: 0.92)
+            continueButton.isHidden = true
+            setContinueButtonHighlighted(false)
             presentStatusOverlay()
         }
     }
@@ -551,9 +635,32 @@ final class GameScene: SKScene {
     }
 
     private func triggerRestart() {
-        guard let store = store else { return }
-        bestScore = max(bestScore, store.score)
-        store.restart()
+        store?.restart()
+    }
+
+    private func continueButtonContains(sceneLocation: CGPoint) -> Bool {
+        guard continueButton.parent != nil else { return false }
+        let overlayPoint = statusOverlay.convert(sceneLocation, from: self)
+        return continueButton.contains(overlayPoint)
+    }
+
+    private func setContinueButtonHighlighted(_ highlighted: Bool) {
+        let targetColor = highlighted ? continueButtonHighlightColor : continueButtonColor
+        if continueButton.fillColor != targetColor {
+            continueButton.fillColor = targetColor
+        }
+    }
+
+    private func isContinueButtonActive() -> Bool {
+        guard let store = store else { return false }
+        return store.canContinue && !statusOverlay.isHidden
+    }
+
+    private func triggerContinue() {
+        store?.continuePlaying()
+        setContinueButtonHighlighted(false)
+        continueTrackingTouch = false
+        continueTouchInside = false
     }
 }
 
@@ -562,6 +669,13 @@ extension GameScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let location = touches.first?.location(in: self) else { return }
+        if isContinueButtonActive() && continueButtonContains(sceneLocation: location) {
+            continueTrackingTouch = true
+            continueTouchInside = true
+            setContinueButtonHighlighted(true)
+            touchStartLocation = nil
+            return
+        }
         if restartButtonContains(sceneLocation: location) {
             restartTrackingTouch = true
             restartTouchInside = true
@@ -570,22 +684,47 @@ extension GameScene {
         } else {
             restartTrackingTouch = false
             restartTouchInside = false
-            touchStartLocation = location
+            if store?.status == .playing {
+                touchStartLocation = location
+            } else {
+                touchStartLocation = nil
+            }
         }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard restartTrackingTouch, let location = touches.first?.location(in: self) else { return }
-        let inside = restartButtonContains(sceneLocation: location)
-        if inside != restartTouchInside {
-            restartTouchInside = inside
-            setRestartButtonHighlighted(inside)
+        guard let location = touches.first?.location(in: self) else { return }
+        if continueTrackingTouch {
+            let inside = continueButtonContains(sceneLocation: location)
+            if inside != continueTouchInside {
+                continueTouchInside = inside
+                setContinueButtonHighlighted(inside)
+            }
+            return
+        }
+        if restartTrackingTouch {
+            let inside = restartButtonContains(sceneLocation: location)
+            if inside != restartTouchInside {
+                restartTouchInside = inside
+                setRestartButtonHighlighted(inside)
+            }
         }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let location = touches.first?.location(in: self) else {
             resetTouchTracking()
+            return
+        }
+
+        if continueTrackingTouch {
+            let inside = continueButtonContains(sceneLocation: location)
+            setContinueButtonHighlighted(false)
+            continueTrackingTouch = false
+            continueTouchInside = false
+            if inside {
+                triggerContinue()
+            }
             return
         }
 
@@ -612,6 +751,7 @@ extension GameScene {
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         setRestartButtonHighlighted(false)
+        setContinueButtonHighlighted(false)
         resetTouchTracking()
     }
 }
@@ -622,6 +762,13 @@ extension GameScene {
 
     override func mouseDown(with event: NSEvent) {
         let location = event.location(in: self)
+        if isContinueButtonActive() && continueButtonContains(sceneLocation: location) {
+            continueTrackingTouch = true
+            continueTouchInside = true
+            setContinueButtonHighlighted(true)
+            touchStartLocation = nil
+            return
+        }
         if restartButtonContains(sceneLocation: location) {
             restartTrackingTouch = true
             restartTouchInside = true
@@ -630,22 +777,45 @@ extension GameScene {
         } else {
             restartTrackingTouch = false
             restartTouchInside = false
-            touchStartLocation = location
+            if store?.status == .playing {
+                touchStartLocation = location
+            } else {
+                touchStartLocation = nil
+            }
         }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard restartTrackingTouch else { return }
         let location = event.location(in: self)
-        let inside = restartButtonContains(sceneLocation: location)
-        if inside != restartTouchInside {
-            restartTouchInside = inside
-            setRestartButtonHighlighted(inside)
+        if continueTrackingTouch {
+            let inside = continueButtonContains(sceneLocation: location)
+            if inside != continueTouchInside {
+                continueTouchInside = inside
+                setContinueButtonHighlighted(inside)
+            }
+            return
+        }
+        if restartTrackingTouch {
+            let inside = restartButtonContains(sceneLocation: location)
+            if inside != restartTouchInside {
+                restartTouchInside = inside
+                setRestartButtonHighlighted(inside)
+            }
         }
     }
 
     override func mouseUp(with event: NSEvent) {
         let location = event.location(in: self)
+        if continueTrackingTouch {
+            let inside = continueButtonContains(sceneLocation: location)
+            setContinueButtonHighlighted(false)
+            continueTrackingTouch = false
+            continueTouchInside = false
+            if inside {
+                triggerContinue()
+            }
+            return
+        }
         if restartTrackingTouch {
             let inside = restartButtonContains(sceneLocation: location)
             setRestartButtonHighlighted(false)
@@ -681,6 +851,12 @@ extension GameScene {
             super.keyDown(with: event)
         case 49:
             triggerRestart()
+        case 36:
+            if isContinueButtonActive() {
+                triggerContinue()
+            } else {
+                super.keyDown(with: event)
+            }
         default:
             super.keyDown(with: event)
         }
@@ -708,5 +884,8 @@ private extension GameScene {
         restartTrackingTouch = false
         restartTouchInside = false
         setRestartButtonHighlighted(false)
+        continueTrackingTouch = false
+        continueTouchInside = false
+        setContinueButtonHighlighted(false)
     }
 }
