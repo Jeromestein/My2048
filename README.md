@@ -4,7 +4,7 @@
 - Based on the SpriteKit Game template; runs on iOS and macOS with a shared `GameScene`.
 - Shared model layer now includes `GameBoard`, `GameTile`, and `MoveResult` to handle spawning, sliding, merging, scoring, and win/lose detection.
 - `GameStore` (`ObservableObject`) wraps `GameBoard` and exposes moves, restart, board snapshots, score, and win/lose status for both targets.
-- `GameScene` now binds to `GameStore`, draws a basic 4×4 SpriteKit grid, renders tiles, and handles swipe/keyboard inputs to trigger moves (no HUD/overlays yet).
+- `GameScene` binds to `GameStore`, draws the 4×4 grid, renders tiles, and now layers a HUD (score/best panels, restart button, win/lose overlay) while routing swipe, mouse, and keyboard input back into the model.
 
 ## Target Architecture
 - **Core Model (`Shared/Models`)**  
@@ -18,9 +18,15 @@
   `GameViewController` sets up the scene and injects a shared `GameStore`. macOS target adds keyboard bindings; iOS target focuses on swipe gestures.
 
 ## Next Steps
-1. Layer in a HUD: score/high-score labels, move counter, restart button, and win/lose overlays reacting to `GameStore.status`.
-2. Enhance presentation: smooth merge/move animations, tile pop on merge, sound effects, and haptics where available.
-3. Cover `GameBoard`/`GameStore` with unit tests (deterministic RNG) and add UI smoke tests for scene-state sync.
+1. Persist HUD data: track and save best score across launches, add move counter, and expose hooks for future UI (settings, undo).
+2. Polish presentation: add merge/move animations, subtle particle effects, sound + haptic feedback, and pause darkening during overlays.
+3. Add coverage: deterministic unit tests for `GameBoard`/`GameStore`, plus a smoke test that instantiates `GameScene` and simulates moves.
+
+## Manual Test Ideas
+- Launch iOS/macOS build; confirm two tiles spawn, score panels show `0`, and best panel retains the session high after restarts.
+- Swipe in each direction (or use arrow keys on macOS) to verify merges update score and HUD without visual glitches.
+- Trigger a win/lose state using a debug board or manual play; confirm overlay text appears and restart button resets the board.
+- Tap/click restart during play and from overlay; ensure the board re-seeds tiles and status returns to playing.
 
 ## Notes
 - Keep the model free of SpriteKit dependencies so it can be reused in future UIs.

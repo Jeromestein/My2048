@@ -23,19 +23,47 @@ final class GameScene: SKScene {
         let spacing: CGFloat
     }
 
+    // Board + tiles
     private var layout: Layout?
     private let boardBackground = SKShapeNode()
     private let tileLayer = SKNode()
     private var tileSprites: [UUID: TileSprite] = [:]
+
+    // HUD
+    private let hudLayer = SKNode()
+    private let scorePanel = SKShapeNode()
+    private let bestPanel = SKShapeNode()
+    private let restartPanel = SKShapeNode()
+    private let scoreTitleLabel = SKLabelNode(text: "SCORE")
+    private let scoreValueLabel = SKLabelNode(text: "0")
+    private let bestTitleLabel = SKLabelNode(text: "BEST")
+    private let bestValueLabel = SKLabelNode(text: "0")
+    private let restartLabel = SKLabelNode(text: "RESTART")
+
+    // Status overlay
+    private let statusOverlay = SKNode()
+    private let statusBackground = SKShapeNode()
+    private let statusTitleLabel = SKLabelNode(text: "")
+    private let statusDetailLabel = SKLabelNode(text: "Tap restart to try again.")
+
+    private var bestScore: Int = 0
+    private var lastRenderedStatus: GameStore.Status?
+    private var panelSize: CGSize = .zero
+
     private var cancellables: Set<AnyCancellable> = []
     private var touchStartLocation: CGPoint?
+    private var restartTrackingTouch = false
+    private var restartTouchInside = false
+
+    private let restartButtonColor = SKColor(red: 0.93, green: 0.59, blue: 0.29, alpha: 1.0)
+    private let restartButtonHighlightColor = SKColor(red: 0.97, green: 0.65, blue: 0.36, alpha: 1.0)
 
     override init(size: CGSize) {
         super.init(size: size)
         scaleMode = .resizeFill
     }
 
-    required init?(coder aDecoder: NSCoder) {
+    required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
@@ -50,6 +78,7 @@ final class GameScene: SKScene {
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
         backgroundColor = SKColor(red: 0.95, green: 0.93, blue: 0.88, alpha: 1.0)
         setupBoardIfNeeded()
+        setupHUDIfNeeded()
         updateLayout()
         syncBoard(animated: false)
     }
@@ -63,6 +92,10 @@ final class GameScene: SKScene {
     private func bindStore() {
         cancellables.removeAll()
         guard let store = store else { return }
+
+        setupBoardIfNeeded()
+        setupHUDIfNeeded()
+        updateLayout()
 
         store.$board
             .receive(on: DispatchQueue.main)
@@ -94,6 +127,83 @@ final class GameScene: SKScene {
         }
     }
 
+    private func setupHUDIfNeeded() {
+        if hudLayer.parent == nil {
+            hudLayer.zPosition = 10
+            addChild(hudLayer)
+        }
+
+        if scorePanel.parent == nil {
+            configurePanelNode(scorePanel, fillColor: SKColor(red: 0.73, green: 0.67, blue: 0.63, alpha: 1.0))
+            configurePanelLabels(title: scoreTitleLabel, value: scoreValueLabel)
+            hudLayer.addChild(scorePanel)
+            scorePanel.addChild(scoreTitleLabel)
+            scorePanel.addChild(scoreValueLabel)
+        }
+
+        if bestPanel.parent == nil {
+            configurePanelNode(bestPanel, fillColor: SKColor(red: 0.73, green: 0.67, blue: 0.63, alpha: 1.0))
+            configurePanelLabels(title: bestTitleLabel, value: bestValueLabel)
+            hudLayer.addChild(bestPanel)
+            bestPanel.addChild(bestTitleLabel)
+            bestPanel.addChild(bestValueLabel)
+        }
+
+        if restartPanel.parent == nil {
+            configurePanelNode(restartPanel, fillColor: restartButtonColor)
+            restartLabel.fontName = "AvenirNext-Bold"
+            restartLabel.fontColor = .white
+            restartLabel.horizontalAlignmentMode = .center
+            restartLabel.verticalAlignmentMode = .center
+            restartPanel.name = "restartPanel"
+            hudLayer.addChild(restartPanel)
+            restartPanel.addChild(restartLabel)
+        }
+
+        if statusOverlay.parent == nil {
+            statusOverlay.zPosition = 30
+            statusOverlay.isHidden = true
+            statusOverlay.alpha = 0
+
+            statusBackground.fillColor = SKColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.55)
+            statusBackground.strokeColor = .clear
+
+            statusTitleLabel.fontName = "AvenirNext-Heavy"
+            statusTitleLabel.fontColor = .white
+            statusTitleLabel.horizontalAlignmentMode = .center
+            statusTitleLabel.verticalAlignmentMode = .center
+
+            statusDetailLabel.fontName = "AvenirNext-Regular"
+            statusDetailLabel.fontColor = .white
+            statusDetailLabel.horizontalAlignmentMode = .center
+            statusDetailLabel.verticalAlignmentMode = .center
+
+            statusOverlay.addChild(statusBackground)
+            statusOverlay.addChild(statusTitleLabel)
+            statusOverlay.addChild(statusDetailLabel)
+            hudLayer.addChild(statusOverlay)
+        }
+    }
+
+    private func configurePanelNode(_ node: SKShapeNode, fillColor: SKColor) {
+        node.fillColor = fillColor
+        node.strokeColor = .clear
+        node.zPosition = 1
+        node.lineWidth = 0
+    }
+
+    private func configurePanelLabels(title: SKLabelNode, value: SKLabelNode) {
+        title.fontName = "AvenirNext-DemiBold"
+        title.fontColor = SKColor(red: 0.98, green: 0.95, blue: 0.92, alpha: 1.0)
+        title.verticalAlignmentMode = .center
+        title.horizontalAlignmentMode = .center
+
+        value.fontName = "AvenirNext-Bold"
+        value.fontColor = .white
+        value.verticalAlignmentMode = .center
+        value.horizontalAlignmentMode = .center
+    }
+
     private func updateLayout() {
         guard let store = store else { return }
         let boardDimension = CGFloat(store.board.size)
@@ -121,6 +231,53 @@ final class GameScene: SKScene {
         boardBackground.position = .zero
 
         updateGridBackground()
+        updateHUDLayout()
+    }
+
+    private func updateHUDLayout() {
+        guard let layout = layout else { return }
+
+        let panelWidth = max(layout.tileSize * 1.35, 120)
+        let panelHeight = max(layout.tileSize * 0.85, 64)
+        panelSize = CGSize(width: panelWidth, height: panelHeight)
+
+        let panelRect = CGRect(x: -panelWidth / 2, y: -panelHeight / 2, width: panelWidth, height: panelHeight)
+        let panelPath = CGPath(roundedRect: panelRect, cornerWidth: 14, cornerHeight: 14, transform: nil)
+        scorePanel.path = panelPath
+        bestPanel.path = panelPath
+        restartPanel.path = panelPath
+
+        let totalWidth = panelWidth * 3 + layout.spacing * 2
+        let startX = -totalWidth / 2 + panelWidth / 2
+        let topOffset = panelHeight / 2 + layout.spacing * 0.6
+        let hudY = boardBackground.frame.maxY + topOffset
+
+        scorePanel.position = CGPoint(x: startX, y: hudY)
+        bestPanel.position = CGPoint(x: startX + panelWidth + layout.spacing, y: hudY)
+        restartPanel.position = CGPoint(x: startX + (panelWidth + layout.spacing) * 2, y: hudY)
+
+        layoutPanelLabels(title: scoreTitleLabel, value: scoreValueLabel, panelHeight: panelHeight)
+        layoutPanelLabels(title: bestTitleLabel, value: bestValueLabel, panelHeight: panelHeight)
+
+        restartLabel.fontSize = panelHeight * 0.36
+        restartLabel.position = .zero
+
+        let overlayWidth = layout.boardSize * 0.8
+        let overlayHeight = layout.boardSize * 0.38
+        let overlayRect = CGRect(x: -overlayWidth / 2, y: -overlayHeight / 2, width: overlayWidth, height: overlayHeight)
+        statusBackground.path = CGPath(roundedRect: overlayRect, cornerWidth: 20, cornerHeight: 20, transform: nil)
+        statusOverlay.position = .zero
+        statusTitleLabel.fontSize = overlayHeight * 0.28
+        statusTitleLabel.position = CGPoint(x: 0, y: overlayHeight * 0.1)
+        statusDetailLabel.fontSize = overlayHeight * 0.16
+        statusDetailLabel.position = CGPoint(x: 0, y: -overlayHeight * 0.18)
+    }
+
+    private func layoutPanelLabels(title: SKLabelNode, value: SKLabelNode, panelHeight: CGFloat) {
+        title.fontSize = panelHeight * 0.26
+        value.fontSize = panelHeight * 0.45
+        title.position = CGPoint(x: 0, y: panelHeight * 0.2)
+        value.position = CGPoint(x: 0, y: -panelHeight * 0.12)
     }
 
     private func updateGridBackground() {
@@ -139,7 +296,9 @@ final class GameScene: SKScene {
     }
 
     private func syncBoard(animated: Bool) {
-        guard let store = store, let layout = layout else { return }
+        guard let store = store else { return }
+        refreshHUD()
+        guard let layout = layout else { return }
 
         var seen: Set<UUID> = []
         for (rowIndex, row) in store.rows.enumerated() {
@@ -175,6 +334,53 @@ final class GameScene: SKScene {
                 sprite.container.run(fade)
             }
             tileSprites.removeValue(forKey: id)
+        }
+    }
+
+    private func refreshHUD() {
+        guard let store = store else { return }
+        bestScore = max(bestScore, store.score)
+        scoreValueLabel.text = "\(store.score)"
+        bestValueLabel.text = "\(bestScore)"
+        updateStatusOverlay(status: store.status)
+    }
+
+    private func updateStatusOverlay(status: GameStore.Status) {
+        guard status != lastRenderedStatus else { return }
+        lastRenderedStatus = status
+
+        switch status {
+        case .playing:
+            hideStatusOverlay()
+        case .won:
+            statusTitleLabel.text = "You Win!"
+            statusDetailLabel.text = "Tap restart to play again."
+            statusBackground.fillColor = SKColor(red: 0.95, green: 0.82, blue: 0.35, alpha: 0.92)
+            presentStatusOverlay()
+        case .lost:
+            statusTitleLabel.text = "Game Over"
+            statusDetailLabel.text = "Tap restart to try again."
+            statusBackground.fillColor = SKColor(red: 0.54, green: 0.31, blue: 0.27, alpha: 0.92)
+            presentStatusOverlay()
+        }
+    }
+
+    private func presentStatusOverlay() {
+        statusOverlay.removeAllActions()
+        if statusOverlay.isHidden {
+            statusOverlay.alpha = 0
+            statusOverlay.isHidden = false
+        }
+        let fade = SKAction.fadeIn(withDuration: 0.18)
+        statusOverlay.run(fade)
+    }
+
+    private func hideStatusOverlay() {
+        guard !statusOverlay.isHidden else { return }
+        statusOverlay.removeAllActions()
+        let fade = SKAction.fadeOut(withDuration: 0.18)
+        statusOverlay.run(fade) { [weak self] in
+            self?.statusOverlay.isHidden = true
         }
     }
 
@@ -242,7 +448,7 @@ final class GameScene: SKScene {
     }
 
     private func textColor(for value: Int) -> SKColor {
-        return value <= 4 ? SKColor(red: 0.47, green: 0.43, blue: 0.40, alpha: 1.0) : .white
+        value <= 4 ? SKColor(red: 0.47, green: 0.43, blue: 0.40, alpha: 1.0) : .white
     }
 
     private func fontSize(for value: Int, tileSize: CGFloat) -> CGFloat {
@@ -255,27 +461,83 @@ final class GameScene: SKScene {
             return max(base, 18)
         }
     }
+
+    private func restartButtonContains(sceneLocation: CGPoint) -> Bool {
+        guard restartPanel.parent != nil else { return false }
+        let hudPoint = hudLayer.convert(sceneLocation, from: self)
+        return restartPanel.contains(hudPoint)
+    }
+
+    private func setRestartButtonHighlighted(_ highlighted: Bool) {
+        let targetColor = highlighted ? restartButtonHighlightColor : restartButtonColor
+        if restartPanel.fillColor != targetColor {
+            restartPanel.fillColor = targetColor
+        }
+    }
+
+    private func triggerRestart() {
+        guard let store = store else { return }
+        bestScore = max(bestScore, store.score)
+        store.restart()
+    }
 }
 
 #if os(iOS) || os(tvOS)
 extension GameScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchStartLocation = touches.first?.location(in: self)
+        guard let location = touches.first?.location(in: self) else { return }
+        if restartButtonContains(sceneLocation: location) {
+            restartTrackingTouch = true
+            restartTouchInside = true
+            setRestartButtonHighlighted(true)
+            touchStartLocation = nil
+        } else {
+            restartTrackingTouch = false
+            restartTouchInside = false
+            touchStartLocation = location
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard restartTrackingTouch, let location = touches.first?.location(in: self) else { return }
+        let inside = restartButtonContains(sceneLocation: location)
+        if inside != restartTouchInside {
+            restartTouchInside = inside
+            setRestartButtonHighlighted(inside)
+        }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let start = touchStartLocation, let location = touches.first?.location(in: self) else {
-            touchStartLocation = nil
+        guard let location = touches.first?.location(in: self) else {
+            resetTouchTracking()
             return
         }
+
+        if restartTrackingTouch {
+            let inside = restartButtonContains(sceneLocation: location)
+            setRestartButtonHighlighted(false)
+            restartTrackingTouch = false
+            restartTouchInside = false
+            if inside {
+                triggerRestart()
+            }
+            return
+        }
+
+        guard let start = touchStartLocation else {
+            resetTouchTracking()
+            return
+        }
+
         let delta = CGPoint(x: location.x - start.x, y: location.y - start.y)
         handleSwipe(delta: delta)
-        touchStartLocation = nil
+        resetTouchTracking()
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        touchStartLocation = nil
+        setRestartButtonHighlighted(false)
+        resetTouchTracking()
     }
 }
 #endif
@@ -284,23 +546,68 @@ extension GameScene {
 extension GameScene {
 
     override func mouseDown(with event: NSEvent) {
-        touchStartLocation = event.location(in: self)
+        let location = event.location(in: self)
+        if restartButtonContains(sceneLocation: location) {
+            restartTrackingTouch = true
+            restartTouchInside = true
+            setRestartButtonHighlighted(true)
+            touchStartLocation = nil
+        } else {
+            restartTrackingTouch = false
+            restartTouchInside = false
+            touchStartLocation = location
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard restartTrackingTouch else { return }
+        let location = event.location(in: self)
+        let inside = restartButtonContains(sceneLocation: location)
+        if inside != restartTouchInside {
+            restartTouchInside = inside
+            setRestartButtonHighlighted(inside)
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard let start = touchStartLocation else { return }
-        let delta = CGPoint(x: event.location(in: self).x - start.x, y: event.location(in: self).y - start.y)
+        let location = event.location(in: self)
+        if restartTrackingTouch {
+            let inside = restartButtonContains(sceneLocation: location)
+            setRestartButtonHighlighted(false)
+            restartTrackingTouch = false
+            restartTouchInside = false
+            if inside {
+                triggerRestart()
+            }
+            return
+        }
+
+        guard let start = touchStartLocation else {
+            resetTouchTracking()
+            return
+        }
+        let delta = CGPoint(x: location.x - start.x, y: location.y - start.y)
         handleSwipe(delta: delta)
-        touchStartLocation = nil
+        resetTouchTracking()
     }
 
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
-        case 123: store?.move(.left)
-        case 124: store?.move(.right)
-        case 125: store?.move(.down)
-        case 126: store?.move(.up)
-        default: super.keyDown(with: event)
+        case 123:
+            store?.move(.left)
+        case 124:
+            store?.move(.right)
+        case 125:
+            store?.move(.down)
+        case 126:
+            store?.move(.up)
+        case 53:
+            resetTouchTracking()
+            super.keyDown(with: event)
+        case 49:
+            triggerRestart()
+        default:
+            super.keyDown(with: event)
         }
     }
 }
@@ -308,7 +615,7 @@ extension GameScene {
 
 private extension GameScene {
     func handleSwipe(delta: CGPoint) {
-        guard let store = store else { return }
+        guard let store = store, store.status == .playing else { return }
         let threshold: CGFloat = 24
         let absX = abs(delta.x)
         let absY = abs(delta.y)
@@ -319,5 +626,12 @@ private extension GameScene {
         } else {
             store.move(delta.y > 0 ? .up : .down)
         }
+    }
+
+    func resetTouchTracking() {
+        touchStartLocation = nil
+        restartTrackingTouch = false
+        restartTouchInside = false
+        setRestartButtonHighlighted(false)
     }
 }
