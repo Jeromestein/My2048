@@ -21,6 +21,7 @@ final class GameScene: SKScene {
         let boardSize: CGFloat
         let tileSize: CGFloat
         let spacing: CGFloat
+        let dimension: Int
     }
 
     // Board + tiles
@@ -28,9 +29,12 @@ final class GameScene: SKScene {
     private let boardBackground = SKShapeNode()
     private let tileLayer = SKNode()
     private var tileSprites: [UUID: TileSprite] = [:]
+    private var boardOffsetY: CGFloat = 0
 
     // HUD
     private let hudLayer = SKNode()
+    private let titleLabel = SKLabelNode(text: "2048")
+    private let subtitleLabel = SKLabelNode(text: "Join the numbers and get to the 2048 tile!")
     private let scorePanel = SKShapeNode()
     private let bestPanel = SKShapeNode()
     private let restartPanel = SKShapeNode()
@@ -38,7 +42,7 @@ final class GameScene: SKScene {
     private let scoreValueLabel = SKLabelNode(text: "0")
     private let bestTitleLabel = SKLabelNode(text: "BEST")
     private let bestValueLabel = SKLabelNode(text: "0")
-    private let restartLabel = SKLabelNode(text: "RESTART")
+    private let restartLabel = SKLabelNode(text: "New Game")
 
     // Status overlay
     private let statusOverlay = SKNode()
@@ -55,8 +59,8 @@ final class GameScene: SKScene {
     private var restartTrackingTouch = false
     private var restartTouchInside = false
 
-    private let restartButtonColor = SKColor(red: 0.93, green: 0.59, blue: 0.29, alpha: 1.0)
-    private let restartButtonHighlightColor = SKColor(red: 0.97, green: 0.65, blue: 0.36, alpha: 1.0)
+    private let restartButtonColor = SKColor(red: 0.64, green: 0.53, blue: 0.44, alpha: 1.0)
+    private let restartButtonHighlightColor = SKColor(red: 0.71, green: 0.58, blue: 0.48, alpha: 1.0)
 
     override init(size: CGSize) {
         super.init(size: size)
@@ -133,8 +137,24 @@ final class GameScene: SKScene {
             addChild(hudLayer)
         }
 
+        if titleLabel.parent == nil {
+            titleLabel.fontName = "AvenirNext-Heavy"
+            titleLabel.fontColor = SKColor(red: 0.42, green: 0.36, blue: 0.32, alpha: 1.0)
+            titleLabel.horizontalAlignmentMode = .left
+            titleLabel.verticalAlignmentMode = .center
+            hudLayer.addChild(titleLabel)
+        }
+
+        if subtitleLabel.parent == nil {
+            subtitleLabel.fontName = "AvenirNext-Medium"
+            subtitleLabel.fontColor = SKColor(red: 0.55, green: 0.49, blue: 0.45, alpha: 1.0)
+            subtitleLabel.horizontalAlignmentMode = .left
+            subtitleLabel.verticalAlignmentMode = .center
+            hudLayer.addChild(subtitleLabel)
+        }
+
         if scorePanel.parent == nil {
-            configurePanelNode(scorePanel, fillColor: SKColor(red: 0.73, green: 0.67, blue: 0.63, alpha: 1.0))
+            configurePanelNode(scorePanel, fillColor: SKColor(red: 0.81, green: 0.75, blue: 0.69, alpha: 1.0))
             configurePanelLabels(title: scoreTitleLabel, value: scoreValueLabel)
             hudLayer.addChild(scorePanel)
             scorePanel.addChild(scoreTitleLabel)
@@ -142,7 +162,7 @@ final class GameScene: SKScene {
         }
 
         if bestPanel.parent == nil {
-            configurePanelNode(bestPanel, fillColor: SKColor(red: 0.73, green: 0.67, blue: 0.63, alpha: 1.0))
+            configurePanelNode(bestPanel, fillColor: SKColor(red: 0.81, green: 0.75, blue: 0.69, alpha: 1.0))
             configurePanelLabels(title: bestTitleLabel, value: bestValueLabel)
             hudLayer.addChild(bestPanel)
             bestPanel.addChild(bestTitleLabel)
@@ -206,17 +226,48 @@ final class GameScene: SKScene {
 
     private func updateLayout() {
         guard let store = store else { return }
-        let boardDimension = CGFloat(store.board.size)
-        guard boardDimension > 0 else { return }
+        let dimension = store.board.size
+        guard dimension > 0 else { return }
+        let dimensionCGFloat = CGFloat(dimension)
 
-        let availableLength = min(size.width, size.height) * 0.88
+        let availableLength = min(size.width, size.height) * 0.82
         guard availableLength > 0 else { return }
 
         let spacing = max(availableLength * 0.04, 8)
-        let tileSize = (availableLength - spacing * (boardDimension + 1)) / boardDimension
+        let tileSize = (availableLength - spacing * (dimensionCGFloat + 1)) / dimensionCGFloat
         guard tileSize > 0 else { return }
 
-        layout = Layout(boardSize: availableLength, tileSize: tileSize, spacing: spacing)
+        let panelWidth = max(tileSize * 1.35, 120)
+        let panelHeight = max(tileSize * 0.85, 64)
+        panelSize = CGSize(width: panelWidth, height: panelHeight)
+        let topMargin: CGFloat = 24
+        let bottomMargin: CGFloat = 24
+
+        let titleFontSize = max(tileSize * 0.85, 54)
+        titleLabel.fontSize = titleFontSize
+        let subtitleFontSize = max(panelHeight * 0.38, 20)
+        subtitleLabel.fontSize = subtitleFontSize
+
+        var offset: CGFloat = 0
+        let boardSize = availableLength
+        let boardTop = boardSize / 2
+        let titleTopAboveBoard = spacing + panelHeight / 2 + panelHeight * 0.32 + titleLabel.frame.height / 2
+        let scoreTopAboveBoard = spacing + panelHeight
+        let headerAboveBoard = max(scoreTopAboveBoard, titleTopAboveBoard)
+        let requiredTop = boardTop + headerAboveBoard
+        let availableTop = size.height / 2 - topMargin
+        if requiredTop > availableTop {
+            offset = availableTop - requiredTop
+        }
+
+        let boardBottom = offset - boardSize / 2
+        let minBottom = -size.height / 2 + bottomMargin
+        if boardBottom < minBottom {
+            offset += (minBottom - boardBottom)
+        }
+
+        boardOffsetY = offset
+        layout = Layout(boardSize: boardSize, tileSize: tileSize, spacing: spacing, dimension: dimension)
 
         let rect = CGRect(
             origin: CGPoint(x: -availableLength / 2, y: -availableLength / 2),
@@ -228,7 +279,7 @@ final class GameScene: SKScene {
             cornerHeight: 16,
             transform: nil
         )
-        boardBackground.position = .zero
+        boardBackground.position = CGPoint(x: 0, y: boardOffsetY)
 
         updateGridBackground()
         updateHUDLayout()
@@ -247,26 +298,46 @@ final class GameScene: SKScene {
         bestPanel.path = panelPath
         restartPanel.path = panelPath
 
-        let totalWidth = panelWidth * 3 + layout.spacing * 2
-        let startX = -totalWidth / 2 + panelWidth / 2
-        let topOffset = panelHeight / 2 + layout.spacing * 0.6
-        let hudY = boardBackground.frame.maxY + topOffset
-
-        scorePanel.position = CGPoint(x: startX, y: hudY)
-        bestPanel.position = CGPoint(x: startX + panelWidth + layout.spacing, y: hudY)
-        restartPanel.position = CGPoint(x: startX + (panelWidth + layout.spacing) * 2, y: hudY)
-
         layoutPanelLabels(title: scoreTitleLabel, value: scoreValueLabel, panelHeight: panelHeight)
         layoutPanelLabels(title: bestTitleLabel, value: bestValueLabel, panelHeight: panelHeight)
 
-        restartLabel.fontSize = panelHeight * 0.36
+        let boardTop = boardBackground.frame.maxY
+        let controlsY = boardTop + layout.spacing + panelHeight / 2
+        let boardRight = layout.boardSize / 2
+        let buttonSpacing = layout.spacing * 0.6
+
+        let restartX = boardRight - panelWidth / 2
+        let bestX = restartX - panelWidth - buttonSpacing
+        let scoreX = bestX - panelWidth - buttonSpacing
+
+        scorePanel.position = CGPoint(x: scoreX, y: controlsY)
+        bestPanel.position = CGPoint(x: bestX, y: controlsY)
+        restartPanel.position = CGPoint(x: restartX, y: controlsY)
+
+        restartLabel.fontSize = panelHeight * 0.34
         restartLabel.position = .zero
+
+        let titleFontSize = max(layout.tileSize * 0.85, 54)
+        titleLabel.fontSize = titleFontSize
+        let subtitleFontSize = max(panelHeight * 0.38, 20)
+        subtitleLabel.fontSize = subtitleFontSize
+
+        let headerLeftX = -layout.boardSize / 2
+        let titleYOffset = panelHeight * 0.32
+        titleLabel.position = CGPoint(x: headerLeftX, y: controlsY + titleYOffset)
+
+        let scoreboardBottom = controlsY - panelHeight / 2
+        let subtitleGap = layout.spacing * 0.35
+        let minSubtitleY = boardTop + subtitleLabel.frame.height / 2 + 6
+        let subtitleTarget = scoreboardBottom - subtitleGap - subtitleLabel.frame.height / 2
+        let subtitleY = max(minSubtitleY, subtitleTarget)
+        subtitleLabel.position = CGPoint(x: headerLeftX, y: subtitleY)
 
         let overlayWidth = layout.boardSize * 0.8
         let overlayHeight = layout.boardSize * 0.38
         let overlayRect = CGRect(x: -overlayWidth / 2, y: -overlayHeight / 2, width: overlayWidth, height: overlayHeight)
         statusBackground.path = CGPath(roundedRect: overlayRect, cornerWidth: 20, cornerHeight: 20, transform: nil)
-        statusOverlay.position = .zero
+        statusOverlay.position = CGPoint(x: 0, y: boardOffsetY)
         statusTitleLabel.fontSize = overlayHeight * 0.28
         statusTitleLabel.position = CGPoint(x: 0, y: overlayHeight * 0.1)
         statusDetailLabel.fontSize = overlayHeight * 0.16
@@ -281,15 +352,15 @@ final class GameScene: SKScene {
     }
 
     private func updateGridBackground() {
-        guard let layout = layout, let store = store else { return }
+        guard let layout = layout else { return }
 
         boardBackground.removeAllChildren()
-        for row in 0..<store.board.size {
-            for column in 0..<store.board.size {
+        for row in 0..<layout.dimension {
+            for column in 0..<layout.dimension {
                 let placeholder = SKShapeNode(rectOf: CGSize(width: layout.tileSize, height: layout.tileSize), cornerRadius: 12)
                 placeholder.fillColor = SKColor(red: 0.80, green: 0.75, blue: 0.71, alpha: 1.0)
                 placeholder.strokeColor = .clear
-                placeholder.position = positionFor(row: row, column: column, layout: layout)
+                placeholder.position = localPositionFor(row: row, column: column, layout: layout)
                 boardBackground.addChild(placeholder)
             }
         }
@@ -422,12 +493,16 @@ final class GameScene: SKScene {
         }
     }
 
-    private func positionFor(row: Int, column: Int, layout: Layout) -> CGPoint {
-        guard let dimension = store?.board.size else { return .zero }
+    private func localPositionFor(row: Int, column: Int, layout: Layout) -> CGPoint {
         let origin = -layout.boardSize / 2 + layout.spacing + layout.tileSize / 2
         let x = origin + CGFloat(column) * (layout.tileSize + layout.spacing)
-        let y = origin + CGFloat(dimension - 1 - row) * (layout.tileSize + layout.spacing)
+        let y = origin + CGFloat(layout.dimension - 1 - row) * (layout.tileSize + layout.spacing)
         return CGPoint(x: x, y: y)
+    }
+
+    private func positionFor(row: Int, column: Int, layout: Layout) -> CGPoint {
+        let local = localPositionFor(row: row, column: column, layout: layout)
+        return CGPoint(x: local.x, y: local.y + boardOffsetY)
     }
 
     private func fillColor(for value: Int) -> SKColor {
