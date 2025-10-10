@@ -274,3 +274,19 @@ struct GameBoard {
         }
     }
 }
+
+#if DEBUG
+extension GameBoard {
+    mutating func setTileForTesting(_ tile: GameTile?, at position: BoardPosition) {
+        tiles[position.index(in: size)] = tile
+    }
+
+    mutating func setScoreForTesting(_ newScore: Int) {
+        score = newScore
+    }
+
+    mutating func setHighestValueForTesting(_ value: Int) {
+        highestValue = value
+    }
+}
+#endif
