@@ -1,2 +1,29 @@
+# macOS system files
 .DS_Store
-.build
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode user data
+DerivedData/
+*.xcuserstate
+xcuserdata/
+xcshareddata/
+*.xccheckout
+*.xcscmblueprint
+*.xcscheme
+xcschememanagement.plist
+contents.xcworkspacedata
+
+# Xcode project workspace
+project.xcworkspace/
+xcuserdata/
+xcshareddata/
+
+# Logs
+*.log
+
+# Temporary editor files
+*.swp
+*.tmp
