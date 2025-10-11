@@ -40,4 +40,28 @@ final class GameStorePersistenceTests: XCTestCase {
         let persistedStore = GameStore(boardSize: 4, targetValue: 16, persistence: persistence, persistenceKey: "test.continue")
         XCTAssertEqual(persistedStore.bestScore, 320)
     }
+
+    func testNoMovesTriggersGameOver() {
+        let persistence = MemoryScorePersistence()
+        var fullBoard = GameBoard(size: 4, targetValue: 2048)
+        let values = [
+            4, 2, 8, 2,
+            2, 8, 32, 64,
+            32, 128, 512, 128,
+            2, 4, 1024, 2048
+        ]
+
+        for (index, value) in values.enumerated() {
+            let position = BoardPosition(row: index / 4, column: index % 4)
+            fullBoard.setTileForTesting(GameTile(value: value), at: position)
+        }
+        fullBoard.setHighestValueForTesting(values.max() ?? 0)
+        fullBoard.setScoreForTesting(1000)
+
+        let store = GameStore(board: fullBoard, persistence: persistence, persistenceKey: "test.gameover")
+        XCTAssertEqual(store.status, .playing)
+
+        store.move(.left)
+        XCTAssertEqual(store.status, .lost)
+    }
 }

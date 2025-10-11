@@ -81,10 +81,12 @@ final class GameStore: ObservableObject {
         let result = workingBoard.move(direction)
 
         lastMove = result
-        guard result.didMove else { return }
 
-        board = workingBoard
-        updateBestScoreIfNeeded()
+        if result.didMove {
+            board = workingBoard
+            updateBestScoreIfNeeded()
+        }
+
         updateStatus(with: result)
     }
 
@@ -115,10 +117,12 @@ final class GameStore: ObservableObject {
         let result = workingBoard.move(direction, using: &generator)
 
         lastMove = result
-        guard result.didMove else { return }
 
-        board = workingBoard
-        updateBestScoreIfNeeded()
+        if result.didMove {
+            board = workingBoard
+            updateBestScoreIfNeeded()
+        }
+
         updateStatus(with: result)
     }
 
