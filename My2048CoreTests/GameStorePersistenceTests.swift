@@ -64,4 +64,48 @@ final class GameStorePersistenceTests: XCTestCase {
         store.move(.left)
         XCTAssertEqual(store.status, .lost)
     }
+
+    func testContinueThenNoMovesEventuallyLoses() {
+        let persistence = MemoryScorePersistence()
+
+        // Board with a win tile but still has an easy merge (two adjacent 4s)
+        var boardWithMoves = GameBoard(size: 4, targetValue: 2048)
+        let initialValues = [
+            4, 4, 2, 2,
+            2, 8, 16, 32,
+            64, 128, 256, 512,
+            1024, 2048, 4, 2
+        ]
+        for (index, value) in initialValues.enumerated() {
+            let position = BoardPosition(row: index / 4, column: index % 4)
+            boardWithMoves.setTileForTesting(GameTile(value: value), at: position)
+        }
+        boardWithMoves.setHighestValueForTesting(2048)
+        boardWithMoves.setScoreForTesting(4096)
+
+        let store = GameStore(board: boardWithMoves, persistence: persistence, persistenceKey: "test.continue.stuck")
+        XCTAssertEqual(store.status, .won)
+
+        store.continuePlaying()
+        XCTAssertEqual(store.status, .playing)
+
+        // Now replace the board with a stuck configuration and attempt a move
+        var stuckBoard = boardWithMoves
+        let stuckValues = [
+            4, 16, 8, 4,
+            8, 128, 32, 16,
+            32, 256, 128, 32,
+            4096, 8, 4, 2
+        ]
+        for (index, value) in stuckValues.enumerated() {
+            let position = BoardPosition(row: index / 4, column: index % 4)
+            stuckBoard.setTileForTesting(GameTile(value: value), at: position)
+        }
+        stuckBoard.setHighestValueForTesting(4096)
+        stuckBoard.setScoreForTesting(48016)
+
+        store.setBoardForTesting(stuckBoard)
+        store.move(.left)
+        XCTAssertEqual(store.status, .lost)
+    }
 }

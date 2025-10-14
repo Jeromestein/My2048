@@ -9,6 +9,7 @@
 - Scene layout dynamically shifts the board/HUD to keep the top controls visible even in short windows.
 - Core logic exposes `ScorePersistence` with `UserDefaults` + in-memory implementations; `GameStore` automatically restores/persists the best score through this layer.
 - Rendering side removes stale tiles immediately (no fade-out) to avoid ghost overlays when new tiles spawn in the same cell.
+- Game status now reevaluates on every swipe so “Keep Going” games still trigger Game Over once no moves remain.
 
 ## Target Architecture
 

@@ -87,7 +87,7 @@ final class GameStore: ObservableObject {
             updateBestScoreIfNeeded()
         }
 
-        updateStatus(with: result)
+        updateStatusAfterMove()
     }
 
     func restart() {
@@ -123,19 +123,22 @@ final class GameStore: ObservableObject {
             updateBestScoreIfNeeded()
         }
 
-        updateStatus(with: result)
+        updateStatusAfterMove()
     }
 
     func continuePlaying() {
         guard status == .won else { return }
         hasContinuedAfterWin = true
-        status = .playing
+        status = board.hasMoves ? .playing : .lost
     }
 
-    private func updateStatus(with result: MoveResult) {
-        if result.didWin {
-            status = hasContinuedAfterWin ? .playing : .won
-        } else if result.isGameOver {
+    private func updateStatusAfterMove() {
+        let reachedWin = board.isWin
+        let hasMoves = board.hasMoves
+
+        if reachedWin && !hasContinuedAfterWin {
+            status = .won
+        } else if !hasMoves {
             status = .lost
         } else {
             status = .playing
@@ -153,3 +156,11 @@ final class GameStore: ObservableObject {
         persistence.save(bestScore: bestScore, forKey: persistenceKey)
     }
 }
+
+#if DEBUG
+extension GameStore {
+    func setBoardForTesting(_ newBoard: GameBoard) {
+        board = newBoard
+    }
+}
+#endif

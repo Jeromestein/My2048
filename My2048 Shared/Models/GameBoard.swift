@@ -63,22 +63,51 @@ struct GameBoard {
         !tiles.contains(where: { $0 == nil })
     }
 
+    /// Determines whether there are any possible moves left on the board.
+    /// Returns `true` if at least one move can be made, otherwise `false`.
+    ///
+    /// A move is possible if:
+    /// 1. There is at least one empty cell (board not full), OR
+    /// 2. There are two adjacent tiles with the same value (merge possible)
     var hasMoves: Bool {
+        
+        // 1️⃣ If there are any empty spaces, the player can always move.
+        //    Example: even if no tiles can merge, you can still slide a new tile in.
         if !isBoardFull {
             return true
         }
-
+        
+        // 2️⃣ If the board is full, check if any adjacent tiles can merge.
+        //    We only need to check right and down neighbors to avoid duplicate checks.
         for row in 0..<size {
             for column in 0..<size {
-                let current = tiles[index(for: row, column: column)]
-                if let right = neighbor(ofRow: row, column: column, direction: .right), tiles[index(for: right.row, column: right.column)]?.value == current?.value {
-                    return true
+                
+                // Get the current tile at (row, column)
+                let currentTile = tiles[index(for: row, column: column)]
+                
+                // --- Check right neighbor ---
+                if let rightNeighbor = neighbor(ofRow: row, column: column, direction: .right) {
+                    let rightTile = tiles[index(for: rightNeighbor.row, column: rightNeighbor.column)]
+                    
+                    // If the right neighbor has the same value, a merge is possible.
+                    if rightTile?.value == currentTile?.value {
+                        return true
+                    }
                 }
-                if let down = neighbor(ofRow: row, column: column, direction: .down), tiles[index(for: down.row, column: down.column)]?.value == current?.value {
-                    return true
+                
+                // --- Check bottom neighbor ---
+                if let bottomNeighbor = neighbor(ofRow: row, column: column, direction: .down) {
+                    let bottomTile = tiles[index(for: bottomNeighbor.row, column: bottomNeighbor.column)]
+                    
+                    // If the bottom neighbor has the same value, a merge is possible.
+                    if bottomTile?.value == currentTile?.value {
+                        return true
+                    }
                 }
             }
         }
+        
+        // 3️⃣ No empty cells and no mergeable neighbors → no moves left.
         return false
     }
 
