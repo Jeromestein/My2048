@@ -27,3 +27,6 @@ xcshareddata/
 # Temporary editor files
 *.swp
 *.tmp
+
+# Zip files
+*.zip
