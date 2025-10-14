@@ -403,21 +403,21 @@ final class GameScene: SKScene {
         titleLabel.position = CGPoint(x: headerLeftX, y: titleY)
         subtitleLabel.position = CGPoint(x: headerLeftX, y: subtitleY)
 
-        let overlayWidth = layout.boardSize * 0.8
-        let overlayHeight = layout.boardSize * 0.38
+        let overlayWidth = layout.boardSize * 0.84
+        let overlayHeight = layout.boardSize * 0.42
         let overlayRect = CGRect(x: -overlayWidth / 2, y: -overlayHeight / 2, width: overlayWidth, height: overlayHeight)
         statusBackground.path = CGPath(roundedRect: overlayRect, cornerWidth: 20, cornerHeight: 20, transform: nil)
         statusOverlay.position = CGPoint(x: 0, y: boardOffsetY)
-        statusTitleLabel.fontSize = overlayHeight * 0.28
-        statusTitleLabel.position = CGPoint(x: 0, y: overlayHeight * 0.1)
-        statusDetailLabel.fontSize = overlayHeight * 0.16
-        statusDetailLabel.position = CGPoint(x: 0, y: -overlayHeight * 0.18)
-        let continueWidth = overlayWidth * 0.46
+        statusTitleLabel.fontSize = overlayHeight * 0.24
+        statusTitleLabel.position = CGPoint(x: 0, y: overlayHeight * 0.18)
+        statusDetailLabel.fontSize = overlayHeight * 0.14
+        statusDetailLabel.position = CGPoint(x: 0, y: overlayHeight * 0.02)
+        let continueWidth = overlayWidth * 0.52
         let continueHeight = overlayHeight * 0.22
-        updatePanelPath(continueButton, width: continueWidth, height: continueHeight, cornerRadius: continueHeight * 0.5)
-        continueLabel.fontSize = continueHeight * 0.45
+        updatePanelPath(continueButton, width: continueWidth, height: continueHeight, cornerRadius: continueHeight * 0.45)
+        continueLabel.fontSize = continueHeight * 0.42
         continueLabel.position = .zero
-        continueButton.position = CGPoint(x: 0, y: -overlayHeight * 0.22)
+        continueButton.position = CGPoint(x: 0, y: -overlayHeight * 0.24)
     }
 
     private func layoutPanelLabels(title: SKLabelNode, value: SKLabelNode, panelHeight: CGFloat) {
@@ -505,7 +505,7 @@ final class GameScene: SKScene {
             hideStatusOverlay()
         case .won:
             statusTitleLabel.text = "You Win!"
-            statusDetailLabel.text = canContinue ? "Keep going or start a new game." : "Tap restart to play again."
+            statusDetailLabel.text = canContinue ? "Keep going\nor start a new game." : "Tap restart to play again."
             statusBackground.fillColor = SKColor(red: 0.95, green: 0.82, blue: 0.35, alpha: 0.92)
             continueButton.isHidden = !canContinue
             setContinueButtonHighlighted(false)
