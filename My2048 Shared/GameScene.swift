@@ -474,11 +474,7 @@ final class GameScene: SKScene {
         for id in obsoleteIds {
             if let sprite = tileSprites[id] {
                 sprite.container.removeAllActions()
-                let fade = SKAction.sequence([
-                    SKAction.fadeOut(withDuration: 0.1),
-                    SKAction.removeFromParent()
-                ])
-                sprite.container.run(fade)
+                sprite.container.removeFromParent()
             }
             tileSprites.removeValue(forKey: id)
         }

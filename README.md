@@ -8,6 +8,7 @@
 - `GameScene` binds to `GameStore`, draws the 4×4 grid, and now mirrors the classic 2048 header (title, tagline, score/best panels, "New Game" button, win/lose overlay plus "Keep Going" option) while routing swipe, mouse, and keyboard input back into the model.
 - Scene layout dynamically shifts the board/HUD to keep the top controls visible even in short windows.
 - Core logic exposes `ScorePersistence` with `UserDefaults` + in-memory implementations; `GameStore` automatically restores/persists the best score through this layer.
+- Rendering side removes stale tiles immediately (no fade-out) to avoid ghost overlays when new tiles spawn in the same cell.
 
 ## Target Architecture
 
