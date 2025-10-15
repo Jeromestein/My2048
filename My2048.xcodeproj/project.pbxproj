@@ -20,6 +20,7 @@
 				GameScene.sks,
 				GameScene.swift,
 				Models/GameBoard.swift,
+				Models/GameBoardPreset.swift,
 				ViewModels/GameStore.swift,
 				ViewModels/ScorePersistence.swift,
 			);
@@ -33,6 +34,7 @@
 				GameScene.sks,
 				GameScene.swift,
 				Models/GameBoard.swift,
+				Models/GameBoardPreset.swift,
 				ViewModels/GameStore.swift,
 				ViewModels/ScorePersistence.swift,
 			);

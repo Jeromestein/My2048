@@ -17,6 +17,13 @@ final class GameScene: SKScene {
         let label: SKLabelNode
     }
 
+    private struct PresetButton {
+        let option: GameBoardPresetOption
+        let container: SKNode
+        let background: SKShapeNode
+        let label: SKLabelNode
+    }
+
     private struct Layout {
         let boardSize: CGFloat
         let tileSize: CGFloat
@@ -57,11 +64,13 @@ final class GameScene: SKScene {
     private let scorePanel = SKShapeNode()
     private let bestPanel = SKShapeNode()
     private let restartPanel = SKShapeNode()
+    private let presetPanel = SKShapeNode()
     private let scoreTitleLabel = SKLabelNode(text: "SCORE")
     private let scoreValueLabel = SKLabelNode(text: "0")
     private let bestTitleLabel = SKLabelNode(text: "BEST")
     private let bestValueLabel = SKLabelNode(text: "0")
     private let restartLabel = SKLabelNode(text: "New Game")
+    private let presetLabel = SKLabelNode(text: "Menu")
 
     // Status overlay
     private let statusOverlay = SKNode()
@@ -70,6 +79,11 @@ final class GameScene: SKScene {
     private let statusDetailLabel = SKLabelNode(text: "Tap restart to try again.")
     private let continueButton = SKShapeNode()
     private let continueLabel = SKLabelNode(text: "Keep Going")
+
+    // Preset menu
+    private let presetMenuOverlay = SKNode()
+    private let presetMenuBackground = SKShapeNode()
+    private var presetButtons: [GameBoardPresetOption: PresetButton] = [:]
 
     private var lastRenderedStatus: GameStore.Status?
     private var lastRenderedCanContinue: Bool = false
@@ -81,11 +95,20 @@ final class GameScene: SKScene {
     private var restartTouchInside = false
     private var continueTrackingTouch = false
     private var continueTouchInside = false
+    private var presetPanelTrackingTouch = false
+    private var presetPanelTouchInside = false
+    private var presetMenuTrackingOption: GameBoardPresetOption?
+    private var isPresetMenuVisible = false
 
     private let restartButtonColor = SKColor(red: 0.64, green: 0.53, blue: 0.44, alpha: 1.0)
     private let restartButtonHighlightColor = SKColor(red: 0.71, green: 0.58, blue: 0.48, alpha: 1.0)
     private let continueButtonColor = SKColor(red: 0.97, green: 0.80, blue: 0.28, alpha: 1.0)
     private let continueButtonHighlightColor = SKColor(red: 0.98, green: 0.84, blue: 0.40, alpha: 1.0)
+    private let presetButtonColor = SKColor(red: 0.58, green: 0.47, blue: 0.40, alpha: 1.0)
+    private let presetButtonHighlightColor = SKColor(red: 0.66, green: 0.54, blue: 0.46, alpha: 1.0)
+    private let presetMenuEntryColor = SKColor(red: 0.90, green: 0.85, blue: 0.80, alpha: 1.0)
+    private let presetMenuEntryHighlightColor = SKColor(red: 0.96, green: 0.91, blue: 0.86, alpha: 1.0)
+    private let presetMenuBackgroundColor = SKColor(red: 0.99, green: 0.97, blue: 0.95, alpha: 1.0)
 
     override init(size: CGSize) {
         super.init(size: size)
@@ -205,6 +228,17 @@ final class GameScene: SKScene {
             restartPanel.addChild(restartLabel)
         }
 
+        if presetPanel.parent == nil {
+            configurePanelNode(presetPanel, fillColor: presetButtonColor)
+            presetLabel.fontName = "AvenirNext-Bold"
+            presetLabel.fontColor = .white
+            presetLabel.horizontalAlignmentMode = .center
+            presetLabel.verticalAlignmentMode = .center
+            presetPanel.name = "presetPanel"
+            hudLayer.addChild(presetPanel)
+            presetPanel.addChild(presetLabel)
+        }
+
         if statusOverlay.parent == nil {
             statusOverlay.zPosition = 30
             statusOverlay.isHidden = true
@@ -236,6 +270,20 @@ final class GameScene: SKScene {
             continueButton.addChild(continueLabel)
             hudLayer.addChild(statusOverlay)
         }
+
+        if presetMenuOverlay.parent == nil {
+            presetMenuOverlay.zPosition = 25
+            presetMenuOverlay.isHidden = true
+            presetMenuOverlay.alpha = 0
+            hudLayer.addChild(presetMenuOverlay)
+
+            presetMenuBackground.fillColor = presetMenuBackgroundColor
+            presetMenuBackground.strokeColor = .clear
+            presetMenuBackground.lineWidth = 0
+            presetMenuOverlay.addChild(presetMenuBackground)
+
+            setupPresetButtons()
+        }
     }
 
     private func configurePanelNode(_ node: SKShapeNode, fillColor: SKColor) {
@@ -255,6 +303,29 @@ final class GameScene: SKScene {
         value.fontColor = .white
         value.verticalAlignmentMode = .center
         value.horizontalAlignmentMode = .center
+    }
+
+    private func setupPresetButtons() {
+        guard presetButtons.isEmpty else { return }
+        for option in GameBoardPresetOption.allCases {
+            let container = SKNode()
+            container.isUserInteractionEnabled = false
+            let background = SKShapeNode()
+            background.fillColor = presetMenuEntryColor
+            background.strokeColor = .clear
+            background.zPosition = 1
+            background.lineWidth = 0
+            let label = SKLabelNode(text: option.title)
+            label.fontName = "AvenirNext-DemiBold"
+            label.fontColor = SKColor(red: 0.45, green: 0.38, blue: 0.33, alpha: 1.0)
+            label.verticalAlignmentMode = .center
+            label.horizontalAlignmentMode = .center
+            label.zPosition = 2
+            background.addChild(label)
+            container.addChild(background)
+            presetMenuOverlay.addChild(container)
+            presetButtons[option] = PresetButton(option: option, container: container, background: background, label: label)
+        }
     }
 
     private func computeHeaderMetrics(boardSize: CGFloat, dimension: CGFloat) -> HeaderMetrics {
@@ -355,43 +426,58 @@ final class GameScene: SKScene {
         layoutPanelLabels(title: scoreTitleLabel, value: scoreValueLabel, panelHeight: metrics.panelHeight)
         layoutPanelLabels(title: bestTitleLabel, value: bestValueLabel, panelHeight: metrics.panelHeight)
 
+        restartLabel.fontSize = metrics.panelHeight * 0.34
+        presetLabel.fontSize = metrics.panelHeight * 0.34
+
         let scoreWidth = max(metrics.basePanelWidth, max(scoreTitleLabel.frame.width, scoreValueLabel.frame.width) + metrics.panelHorizontalPadding)
         let bestWidth = max(metrics.basePanelWidth, max(bestTitleLabel.frame.width, bestValueLabel.frame.width) + metrics.panelHorizontalPadding)
 
         let restartTextWidth = max(restartLabel.frame.width, restartLabel.frame.height)
         let restartWidth = max(metrics.basePanelWidth, restartTextWidth + metrics.panelHorizontalPadding)
 
+        let presetTextWidth = max(presetLabel.frame.width, presetLabel.frame.height)
+        let presetWidth = max(metrics.basePanelWidth, presetTextWidth + metrics.panelHorizontalPadding)
+
         updatePanelPath(scorePanel, width: scoreWidth, height: metrics.panelHeight, cornerRadius: 14)
         updatePanelPath(bestPanel, width: bestWidth, height: metrics.panelHeight, cornerRadius: 14)
         updatePanelPath(restartPanel, width: restartWidth, height: metrics.panelHeight, cornerRadius: 16)
+        updatePanelPath(presetPanel, width: presetWidth, height: metrics.panelHeight, cornerRadius: 16)
 
         let boardTop = boardOffsetY + layout.boardSize / 2
         let scoreboardRowY = boardTop + metrics.scoreboardGap + metrics.panelHeight / 2
 
         let boardLeft = -layout.boardSize / 2
-        let boardRight = layout.boardSize / 2
-
         var spacing = metrics.scoreboardSpacing
-        let totalWidths = scoreWidth + bestWidth + restartWidth
-        var totalRowWidth = totalWidths + spacing * 2
+        let panelEntries: [(node: SKShapeNode, width: CGFloat)] = [
+            (scorePanel, scoreWidth),
+            (bestPanel, bestWidth),
+            (presetPanel, presetWidth),
+            (restartPanel, restartWidth)
+        ]
+        let totalWidths = panelEntries.reduce(0) { $0 + $1.width }
+        let panelCount = panelEntries.count
+        let spacingCount = CGFloat(max(panelCount - 1, 0))
+        var totalRowWidth = totalWidths + spacing * spacingCount
         if totalRowWidth > layout.boardSize {
             let availableSpacing = layout.boardSize - totalWidths
-            let clampedSpacing = max(metrics.minScoreboardSpacing, availableSpacing / 2)
+            let clampedSpacing = max(metrics.minScoreboardSpacing, availableSpacing / max(spacingCount, 1))
             spacing = clampedSpacing
-            totalRowWidth = totalWidths + spacing * 2
+            totalRowWidth = totalWidths + spacing * spacingCount
         }
 
         let rowStart = boardLeft + max(0, (layout.boardSize - totalRowWidth) / 2)
-        let scoreX = rowStart + scoreWidth / 2
-        let bestX = scoreX + scoreWidth / 2 + spacing + bestWidth / 2
-        let restartX = bestX + bestWidth / 2 + spacing + restartWidth / 2
+        var currentX = rowStart
+        for (index, entry) in panelEntries.enumerated() {
+            currentX += entry.width / 2
+            entry.node.position = CGPoint(x: currentX, y: scoreboardRowY)
+            currentX += entry.width / 2
+            if index < panelEntries.count - 1 {
+                currentX += spacing
+            }
+        }
 
-        scorePanel.position = CGPoint(x: scoreX, y: scoreboardRowY)
-        bestPanel.position = CGPoint(x: bestX, y: scoreboardRowY)
-        restartPanel.position = CGPoint(x: restartX, y: scoreboardRowY)
-
-        restartLabel.fontSize = metrics.panelHeight * 0.34
         restartLabel.position = .zero
+        presetLabel.position = .zero
 
         titleLabel.fontSize = metrics.titleFont
         subtitleLabel.fontSize = metrics.subtitleFont
@@ -418,6 +504,8 @@ final class GameScene: SKScene {
         continueLabel.fontSize = continueHeight * 0.42
         continueLabel.position = .zero
         continueButton.position = CGPoint(x: 0, y: -overlayHeight * 0.24)
+
+        layoutPresetMenu(with: metrics, presetPanelWidth: presetWidth)
     }
 
     private func layoutPanelLabels(title: SKLabelNode, value: SKLabelNode, panelHeight: CGFloat) {
@@ -425,6 +513,53 @@ final class GameScene: SKScene {
         value.fontSize = panelHeight * 0.45
         title.position = CGPoint(x: 0, y: panelHeight * 0.2)
         value.position = CGPoint(x: 0, y: -panelHeight * 0.12)
+    }
+
+    private func layoutPresetMenu(with metrics: HeaderMetrics, presetPanelWidth: CGFloat) {
+        guard presetPanel.parent != nil, !presetButtons.isEmpty else { return }
+
+        let buttonCount = CGFloat(presetButtons.count)
+        guard buttonCount > 0 else { return }
+
+        let buttonHeight = metrics.panelHeight * 0.78
+        let buttonSpacing = metrics.scoreboardSpacing * 0.6
+        let padding = metrics.spacing
+
+        var buttonWidth = max(presetPanelWidth, metrics.basePanelWidth)
+        for button in presetButtons.values {
+            button.label.fontSize = buttonHeight * 0.42
+            button.label.position = .zero
+            buttonWidth = max(buttonWidth, button.label.frame.width + metrics.panelHorizontalPadding)
+        }
+
+        for button in presetButtons.values {
+            updatePanelPath(button.background, width: buttonWidth, height: buttonHeight, cornerRadius: 12)
+        }
+
+        let totalButtonsHeight = buttonHeight * buttonCount
+        let totalSpacing = buttonSpacing * max(buttonCount - 1, 0)
+        let overlayWidth = buttonWidth + padding * 2
+        let overlayHeight = totalButtonsHeight + totalSpacing + padding * 2
+
+        let overlayRect = CGRect(x: -overlayWidth / 2, y: -overlayHeight / 2, width: overlayWidth, height: overlayHeight)
+        presetMenuBackground.path = CGPath(roundedRect: overlayRect, cornerWidth: 18, cornerHeight: 18, transform: nil)
+
+        let startY = overlayHeight / 2 - padding - buttonHeight / 2
+        var currentY = startY
+        let options = GameBoardPresetOption.allCases
+        for (index, option) in options.enumerated() {
+            guard let button = presetButtons[option] else { continue }
+            button.container.position = CGPoint(x: 0, y: currentY)
+            currentY -= buttonHeight
+            if index < options.count - 1 {
+                currentY -= buttonSpacing
+            }
+        }
+
+        let panelBottom = presetPanel.position.y - metrics.panelHeight / 2
+        let verticalGap = max(metrics.spacing * 0.8, 18)
+        let overlayY = panelBottom - verticalGap - overlayHeight / 2
+        presetMenuOverlay.position = CGPoint(x: presetPanel.position.x, y: overlayY)
     }
 
     private func updateGridBackground() {
@@ -633,6 +768,77 @@ final class GameScene: SKScene {
         }
     }
 
+    private func presetPanelContains(sceneLocation: CGPoint) -> Bool {
+        guard presetPanel.parent != nil else { return false }
+        let hudPoint = hudLayer.convert(sceneLocation, from: self)
+        return presetPanel.contains(hudPoint)
+    }
+
+    private func setPresetPanelHighlighted(_ highlighted: Bool) {
+        let targetColor = highlighted ? presetButtonHighlightColor : presetButtonColor
+        if presetPanel.fillColor != targetColor {
+            presetPanel.fillColor = targetColor
+        }
+    }
+
+    private func menuOption(for node: SKNode) -> GameBoardPresetOption? {
+        for (option, button) in presetButtons {
+            if node === button.container || node.inParentHierarchy(button.container) {
+                return option
+            }
+        }
+        return nil
+    }
+
+    private func setPresetMenuButtonHighlighted(_ option: GameBoardPresetOption, highlighted: Bool) {
+        guard let button = presetButtons[option] else { return }
+        let targetColor = highlighted ? presetMenuEntryHighlightColor : presetMenuEntryColor
+        if button.background.fillColor != targetColor {
+            button.background.fillColor = targetColor
+        }
+    }
+
+    private func hidePresetMenu(animated: Bool) {
+        guard isPresetMenuVisible else { return }
+        isPresetMenuVisible = false
+        if let option = presetMenuTrackingOption {
+            setPresetMenuButtonHighlighted(option, highlighted: false)
+        }
+        presetMenuTrackingOption = nil
+        presetPanelTrackingTouch = false
+        presetPanelTouchInside = false
+        presetMenuOverlay.removeAllActions()
+        if animated {
+            let fade = SKAction.fadeAlpha(to: 0, duration: 0.12)
+            let finalize = SKAction.run { [weak self] in
+                self?.presetMenuOverlay.isHidden = true
+            }
+            presetMenuOverlay.run(SKAction.sequence([fade, finalize]))
+        } else {
+            presetMenuOverlay.alpha = 0
+            presetMenuOverlay.isHidden = true
+        }
+    }
+
+    private func showPresetMenu(animated: Bool) {
+        guard !isPresetMenuVisible else { return }
+        isPresetMenuVisible = true
+        presetMenuOverlay.removeAllActions()
+        presetMenuOverlay.isHidden = false
+        if animated {
+            presetMenuOverlay.alpha = 0
+            presetMenuOverlay.run(SKAction.fadeAlpha(to: 1, duration: 0.15))
+        } else {
+            presetMenuOverlay.alpha = 1
+        }
+    }
+
+    private func presentPreset(_ option: GameBoardPresetOption) {
+        setPresetPanelHighlighted(false)
+        store?.start(with: option)
+        hidePresetMenu(animated: true)
+    }
+
     private func triggerRestart() {
         store?.restart()
     }
@@ -668,10 +874,30 @@ extension GameScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let location = touches.first?.location(in: self) else { return }
+        if isPresetMenuVisible {
+            let touchedNode = atPoint(location)
+            if let option = menuOption(for: touchedNode) {
+                presetMenuTrackingOption = option
+                setPresetMenuButtonHighlighted(option, highlighted: true)
+            } else {
+                hidePresetMenu(animated: true)
+            }
+            touchStartLocation = nil
+            restartTrackingTouch = false
+            continueTrackingTouch = false
+            return
+        }
         if isContinueButtonActive() && continueButtonContains(sceneLocation: location) {
             continueTrackingTouch = true
             continueTouchInside = true
             setContinueButtonHighlighted(true)
+            touchStartLocation = nil
+            return
+        }
+        if presetPanelContains(sceneLocation: location) {
+            presetPanelTrackingTouch = true
+            presetPanelTouchInside = true
+            setPresetPanelHighlighted(true)
             touchStartLocation = nil
             return
         }
@@ -693,11 +919,35 @@ extension GameScene {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let location = touches.first?.location(in: self) else { return }
+        if isPresetMenuVisible {
+            let touchedNode = atPoint(location)
+            let optionUnderTouch = menuOption(for: touchedNode)
+            if optionUnderTouch != presetMenuTrackingOption {
+                if let tracked = presetMenuTrackingOption {
+                    setPresetMenuButtonHighlighted(tracked, highlighted: false)
+                }
+                if let newOption = optionUnderTouch {
+                    presetMenuTrackingOption = newOption
+                    setPresetMenuButtonHighlighted(newOption, highlighted: true)
+                } else {
+                    presetMenuTrackingOption = nil
+                }
+            }
+            return
+        }
         if continueTrackingTouch {
             let inside = continueButtonContains(sceneLocation: location)
             if inside != continueTouchInside {
                 continueTouchInside = inside
                 setContinueButtonHighlighted(inside)
+            }
+            return
+        }
+        if presetPanelTrackingTouch {
+            let inside = presetPanelContains(sceneLocation: location)
+            if inside != presetPanelTouchInside {
+                presetPanelTouchInside = inside
+                setPresetPanelHighlighted(inside)
             }
             return
         }
@@ -716,6 +966,24 @@ extension GameScene {
             return
         }
 
+        if isPresetMenuVisible {
+            let touchedNode = atPoint(location)
+            let optionUnderTouch = menuOption(for: touchedNode)
+            var didSelectPreset = false
+            if let tracked = presetMenuTrackingOption {
+                setPresetMenuButtonHighlighted(tracked, highlighted: false)
+                presetMenuTrackingOption = nil
+                if optionUnderTouch == tracked {
+                    presentPreset(tracked)
+                    didSelectPreset = true
+                }
+            }
+            if !didSelectPreset {
+                hidePresetMenu(animated: true)
+            }
+            return
+        }
+
         if continueTrackingTouch {
             let inside = continueButtonContains(sceneLocation: location)
             setContinueButtonHighlighted(false)
@@ -723,6 +991,24 @@ extension GameScene {
             continueTouchInside = false
             if inside {
                 triggerContinue()
+            }
+            return
+        }
+
+        if presetPanelTrackingTouch {
+            let inside = presetPanelContains(sceneLocation: location)
+            setPresetPanelHighlighted(false)
+            presetPanelTrackingTouch = false
+            presetPanelTouchInside = false
+            if inside {
+                if isPresetMenuVisible {
+                    hidePresetMenu(animated: true)
+                } else {
+                    if let metrics = headerMetrics {
+                        layoutPresetMenu(with: metrics, presetPanelWidth: presetPanel.frame.width)
+                    }
+                    showPresetMenu(animated: true)
+                }
             }
             return
         }
@@ -761,10 +1047,30 @@ extension GameScene {
 
     override func mouseDown(with event: NSEvent) {
         let location = event.location(in: self)
+        if isPresetMenuVisible {
+            let node = atPoint(location)
+            if let option = menuOption(for: node) {
+                presetMenuTrackingOption = option
+                setPresetMenuButtonHighlighted(option, highlighted: true)
+            } else {
+                hidePresetMenu(animated: true)
+            }
+            touchStartLocation = nil
+            restartTrackingTouch = false
+            continueTrackingTouch = false
+            return
+        }
         if isContinueButtonActive() && continueButtonContains(sceneLocation: location) {
             continueTrackingTouch = true
             continueTouchInside = true
             setContinueButtonHighlighted(true)
+            touchStartLocation = nil
+            return
+        }
+        if presetPanelContains(sceneLocation: location) {
+            presetPanelTrackingTouch = true
+            presetPanelTouchInside = true
+            setPresetPanelHighlighted(true)
             touchStartLocation = nil
             return
         }
@@ -786,11 +1092,35 @@ extension GameScene {
 
     override func mouseDragged(with event: NSEvent) {
         let location = event.location(in: self)
+        if isPresetMenuVisible {
+            let node = atPoint(location)
+            let optionUnderCursor = menuOption(for: node)
+            if optionUnderCursor != presetMenuTrackingOption {
+                if let tracked = presetMenuTrackingOption {
+                    setPresetMenuButtonHighlighted(tracked, highlighted: false)
+                }
+                if let newOption = optionUnderCursor {
+                    presetMenuTrackingOption = newOption
+                    setPresetMenuButtonHighlighted(newOption, highlighted: true)
+                } else {
+                    presetMenuTrackingOption = nil
+                }
+            }
+            return
+        }
         if continueTrackingTouch {
             let inside = continueButtonContains(sceneLocation: location)
             if inside != continueTouchInside {
                 continueTouchInside = inside
                 setContinueButtonHighlighted(inside)
+            }
+            return
+        }
+        if presetPanelTrackingTouch {
+            let inside = presetPanelContains(sceneLocation: location)
+            if inside != presetPanelTouchInside {
+                presetPanelTouchInside = inside
+                setPresetPanelHighlighted(inside)
             }
             return
         }
@@ -805,6 +1135,23 @@ extension GameScene {
 
     override func mouseUp(with event: NSEvent) {
         let location = event.location(in: self)
+        if isPresetMenuVisible {
+            let node = atPoint(location)
+            let optionUnderCursor = menuOption(for: node)
+            var didSelectPreset = false
+            if let tracked = presetMenuTrackingOption {
+                setPresetMenuButtonHighlighted(tracked, highlighted: false)
+                presetMenuTrackingOption = nil
+                if optionUnderCursor == tracked {
+                    presentPreset(tracked)
+                    didSelectPreset = true
+                }
+            }
+            if !didSelectPreset {
+                hidePresetMenu(animated: true)
+            }
+            return
+        }
         if continueTrackingTouch {
             let inside = continueButtonContains(sceneLocation: location)
             setContinueButtonHighlighted(false)
@@ -812,6 +1159,23 @@ extension GameScene {
             continueTouchInside = false
             if inside {
                 triggerContinue()
+            }
+            return
+        }
+        if presetPanelTrackingTouch {
+            let inside = presetPanelContains(sceneLocation: location)
+            setPresetPanelHighlighted(false)
+            presetPanelTrackingTouch = false
+            presetPanelTouchInside = false
+            if inside {
+                if isPresetMenuVisible {
+                    hidePresetMenu(animated: true)
+                } else {
+                    if let metrics = headerMetrics {
+                        layoutPresetMenu(with: metrics, presetPanelWidth: presetPanel.frame.width)
+                    }
+                    showPresetMenu(animated: true)
+                }
             }
             return
         }
@@ -886,5 +1250,12 @@ private extension GameScene {
         continueTrackingTouch = false
         continueTouchInside = false
         setContinueButtonHighlighted(false)
+        presetPanelTrackingTouch = false
+        presetPanelTouchInside = false
+        setPresetPanelHighlighted(false)
+        if let option = presetMenuTrackingOption {
+            setPresetMenuButtonHighlighted(option, highlighted: false)
+        }
+        presetMenuTrackingOption = nil
     }
 }

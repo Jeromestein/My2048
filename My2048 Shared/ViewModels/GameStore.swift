@@ -126,6 +126,22 @@ final class GameStore: ObservableObject {
         updateStatusAfterMove()
     }
 
+    func start(with presetOption: GameBoardPresetOption) {
+        let preset = presetOption.preset
+        guard preset.dimension == board.size else {
+            assertionFailure("Preset dimension \(preset.dimension) does not match board size \(board.size)")
+            return
+        }
+        var newBoard = GameBoard(size: board.size, targetValue: board.targetValue)
+        var generator = SystemRandomNumberGenerator()
+        newBoard.applyPreset(preset, using: &generator)
+        board = newBoard
+        lastMove = nil
+        hasContinuedAfterWin = false
+        updateBestScoreIfNeeded()
+        updateStatusAfterMove()
+    }
+
     func continuePlaying() {
         guard status == .won else { return }
         hasContinuedAfterWin = true

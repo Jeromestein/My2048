@@ -120,6 +120,23 @@ struct GameBoard {
         reset(initialTiles: initialTiles, using: &generator)
     }
 
+    mutating func applyPreset(_ preset: GameBoardPreset) {
+        var generator = SystemRandomNumberGenerator()
+        applyPreset(preset, using: &generator)
+    }
+
+    mutating func applyPreset<G: RandomNumberGenerator>(_ preset: GameBoardPreset, using generator: inout G) {
+        precondition(preset.dimension == size, "Preset dimension must match board size")
+        let values = preset.makeTileValues(using: &generator)
+        precondition(values.count == tiles.count, "Preset tile count must match board capacity")
+        tiles = values.map { value in
+            guard let value else { return nil }
+            return GameTile(value: value)
+        }
+        score = preset.score
+        highestValue = tiles.compactMap { $0?.value }.max() ?? 0
+    }
+
     mutating func reset<G: RandomNumberGenerator>(initialTiles: Int = 2, using generator: inout G) {
         tiles = Array(repeating: nil, count: size * size)
         score = 0
