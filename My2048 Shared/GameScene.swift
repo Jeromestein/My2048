@@ -563,6 +563,9 @@ final class GameScene: SKScene {
             sprite.label.fontSize = fontSize(for: tile.value, tileSize: layout.tileSize)
         }
 
+        sprite.container.alpha = 1.0
+        sprite.label.alpha = 1.0
+
         sprite.container.removeAllActions()
         if animated {
             let move = SKAction.move(to: targetPosition, duration: 0.08)
