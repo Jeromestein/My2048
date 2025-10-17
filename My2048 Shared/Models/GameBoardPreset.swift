@@ -5,17 +5,20 @@ struct GameBoardPreset {
     let title: String
     let dimension: Int
     let targetValue: Int
-    let score: Int
 
     private let additionalTilePool: [Int]
     private let additionalTileCountRange: ClosedRange<Int>
+
+    struct GeneratedBoard {
+        let tiles: [Int?]
+        let score: Int
+    }
 
     init(
         identifier: String,
         title: String,
         dimension: Int = 4,
         targetValue: Int,
-        score: Int? = nil,
         additionalTilePool: [Int],
         additionalTileCountRange: ClosedRange<Int>
     ) {
@@ -31,12 +34,22 @@ struct GameBoardPreset {
         self.title = title
         self.dimension = dimension
         self.targetValue = targetValue
-        self.score = score ?? GameBoardPreset.defaultScore(forTargetValue: targetValue)
         self.additionalTilePool = additionalTilePool
         self.additionalTileCountRange = minSupportedAdditional...maxSupportedAdditional
     }
 
-    func makeTileValues<G: RandomNumberGenerator>(using generator: inout G) -> [Int?] {
+    func generate() -> GeneratedBoard {
+        var generator = SystemRandomNumberGenerator()
+        return generate(using: &generator)
+    }
+
+    func generate<G: RandomNumberGenerator>(using generator: inout G) -> GeneratedBoard {
+        let tileValues = makeTileValues(using: &generator)
+        let score = GameBoardPreset.score(forTileValues: tileValues)
+        return GeneratedBoard(tiles: tileValues, score: score)
+    }
+
+    private func makeTileValues<G: RandomNumberGenerator>(using generator: inout G) -> [Int?] {
         let totalSlots = dimension * dimension
         guard totalSlots > 0 else { return [] }
 
@@ -78,15 +91,37 @@ struct GameBoardPreset {
         return values
     }
 
-    private static func defaultScore(forTargetValue value: Int) -> Int {
-        guard value > 0 else { return 0 }
-        var exponent = 0
-        var workingValue = value
-        while workingValue > 1 {
-            workingValue >>= 1
-            exponent += 1
+    private static func exponent(for value: Int) -> Int? {
+        guard value > 0, value & (value - 1) == 0 else { return nil }
+        return value.trailingZeroBitCount
+    }
+
+    static func score(forTileValues values: [Int?]) -> Int {
+        var counts: [Int: Int] = [:]
+
+        for value in values {
+            guard let value, let exponent = exponent(for: value) else { continue }
+            counts[exponent, default: 0] += 1
         }
-        return value * max(exponent - 1, 0)
+
+        guard let maxExponent = counts.keys.max(), maxExponent >= 2 else {
+            return 0
+        }
+
+        var score = 0
+        var carry = 0
+        for exponent in stride(from: maxExponent, through: 2, by: -1) {
+            let consumedForHigher = carry
+            let currentCount = counts[exponent] ?? 0
+            let totalProduced = currentCount + consumedForHigher
+            if totalProduced > 0 {
+                let value = 1 << exponent
+                score += totalProduced * value
+            }
+            carry = totalProduced * 2
+        }
+
+        return score
     }
 }
 
